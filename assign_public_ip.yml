@@ -1,55 +1,66 @@
----
-- name: Assign Public IP to Azure VM and Start VM
+- name: Test Azure Authentication
   hosts: localhost
   tasks:
-    - name: Create Public IP
-      azure.azcollection.azure_rm_publicipaddress:
-        resource_group: "{{ resource_group }}"
-        name: "{{ public_ip_name }}"
-        allocation_method: Static
-        sku: Basic
-        state: present
-        location: "{{ location }}"
-        client_id: "{{ lookup('env', 'AZURE_CLIENT_ID') }}"
-        secret: "{{ lookup('env', 'AZURE_CLIENT_SECRET') }}"
-        tenant: "{{ lookup('env', 'AZURE_TENANT_ID') }}"
-        subscription_id: "{{ lookup('env', 'AZURE_SUBSCRIPTION_ID') }}"
-      register: public_ip
-
-    - name: Get VM Network Interface
+    - name: Get Azure VM facts
       azure.azcollection.azure_rm_virtualmachine_info:
-        resource_group: "{{ resource_group }}"
-        name: "{{ vm_name }}"
-        client_id: "{{ lookup('env', 'AZURE_CLIENT_ID') }}"
-        secret: "{{ lookup('env', 'AZURE_CLIENT_SECRET') }}"
-        tenant: "{{ lookup('env', 'AZURE_TENANT_ID') }}"
-        subscription_id: "{{ lookup('env', 'AZURE_SUBSCRIPTION_ID') }}"
-      register: vm_info
+        resource_group: dookpoly
+        auth_source: cli
+        subscription_id: "1cb8397c-4ead-4b14-a1bc-fb5044d9b178"
+      register: result
+    - name: Set location variable
+      set_fact:
+        location: "{{ result.vms[0].location }}"
+    - name: Display result
+      debug:
+        var: result
+    - name: Start the VM
+      azure_rm_virtualmachine:
+        resource_group: dookpoly
+        auth_source: cli
+        subscription_id: "1cb8397c-4ead-4b14-a1bc-fb5044d9b178"
+        name: ubntuServer
+        started: yes
+    - name: Assign public IP
+      azure_rm_publicipaddress:
+        resource_group: dookpoly
+        auth_source: cli
+        subscription_id: "1cb8397c-4ead-4b14-a1bc-fb5044d9b178"
+        name: ubntuServer-ip
+        allocation_method: Static
+        sku: Standard
+        location: "{{ location }}"
+
+    - name: Get network interface details
+      azure_rm_networkinterface_info:
+        resource_group: "dookpoly"
+        auth_source: cli
+        subscription_id: "1cb8397c-4ead-4b14-a1bc-fb5044d9b178"
+        name: "ubntu"
+      register: nic_facts
+    - name: Get public IP info
+      azure_rm_publicipaddress_info:
+        resource_group: "dookpoly"
+        name: "ubntuServer-ip"
+        auth_source: cli
+        subscription_id: "1cb8397c-4ead-4b14-a1bc-fb5044d9b178"
+      register: public_ip_info
+    - name: Display public IP address1
+      debug:
+        msg: "The public IP address is {{ public_ip_info }}"
 
     - name: Update Network Interface with Public IP
       azure.azcollection.azure_rm_networkinterface:
-        resource_group: "{{ resource_group }}"
-        name: "{{ vm_info.azure_vm.network_profile.network_interfaces[0].id.split('/')[-1] }}"
+        resource_group: "dookpoly"
+        auth_source: cli
+        subscription_id: "1cb8397c-4ead-4b14-a1bc-fb5044d9b178"
+        name: "ubntu"
+        virtual_network: "dokkerploy-network"
+        subnet_name: "dokkerpoly"
         ip_configurations:
-          - name: "{{ vm_info.azure_vm.network_profile.network_interfaces[0].primary }}"
-            public_ip_address: "{{ public_ip.public_ip.id }}"
-        client_id: "{{ lookup('env', 'AZURE_CLIENT_ID') }}"
-        secret: "{{ lookup('env', 'AZURE_CLIENT_SECRET') }}"
-        tenant: "{{ lookup('env', 'AZURE_TENANT_ID') }}"
-        subscription_id: "{{ lookup('env', 'AZURE_SUBSCRIPTION_ID') }}"
+          - name: "Ipv4config"
+            public_ip_address_name: "{{ public_ip_info.publicipaddresses[0].name }}"
+            primary: yes
 
-    - name: Start VM
-      azure.azcollection.azure_rm_virtualmachine:
-        resource_group: "{{ resource_group }}"
-        name: "{{ vm_name }}"
-        state: started
-        client_id: "{{ lookup('env', 'AZURE_CLIENT_ID') }}"
-        secret: "{{ lookup('env', 'AZURE_CLIENT_SECRET') }}"
-        tenant: "{{ lookup('env', 'AZURE_TENANT_ID') }}"
-        subscription_id: "{{ lookup('env', 'AZURE_SUBSCRIPTION_ID') }}"
-
-  vars:
-    resource_group: "dookpoly"
-    vm_name: "ubntuServer"
-    public_ip_name: "ubntuServerPublicIP"
-    location: "North Europe"
+    - name: Display public IP address1
+      debug:
+        msg: "The public IP address is {{ public_ip_info.publicipaddresses[0].name }}"
